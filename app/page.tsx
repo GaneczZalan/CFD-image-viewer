@@ -36,6 +36,8 @@ type Theme = "light" | "dark";
 type TimingMode = "fps" | "frame" | "total";
 type StillFormat = "png" | "jpeg" | "webp";
 type AnimationFormat = "webm" | "mp4";
+type SubfolderMode = "shared" | "all";
+type ImageMatchMode = "name" | "index";
 type DrawTool = "none" | "pencil" | "arrow" | "line" | "rect" | "roundRect" | "eraser";
 type Point = { x: number; y: number };
 type DrawTargets = "all" | string[];
@@ -59,12 +61,43 @@ function makeSlot(caseItem: ImageCase): Slot {
   };
 }
 
+function countSharedCategories(cases: ImageCase[]) {
+  return intersectNames(cases.map((caseItem) => caseItem.categories.map((category) => category.id))).length;
+}
+
+function getInitialCases(cases: ImageCase[]) {
+  if (cases.length <= 2) {
+    return cases;
+  }
+
+  let bestPair = cases.slice(0, 2);
+  let bestScore = countSharedCategories(bestPair);
+
+  for (let firstIndex = 0; firstIndex < cases.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < cases.length; secondIndex += 1) {
+      const pair = [cases[firstIndex], cases[secondIndex]];
+      const score = countSharedCategories(pair);
+
+      if (score > bestScore) {
+        bestPair = pair;
+        bestScore = score;
+      }
+    }
+  }
+
+  return bestPair;
+}
+
 function naturalSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
 function getCategory(caseItem: ImageCase | undefined, categoryId: string) {
   return caseItem?.categories.find((category) => category.id === categoryId);
+}
+
+function getCategoryImages(caseItem: ImageCase | undefined, categoryId: string) {
+  return getCategory(caseItem, categoryId)?.images ?? [];
 }
 
 function intersectNames(lists: string[][]) {
@@ -76,8 +109,19 @@ function intersectNames(lists: string[][]) {
   return first.filter((name) => rest.every((list) => list.includes(name))).sort(naturalSort);
 }
 
-function getSlotImage(caseItem: ImageCase | undefined, categoryId: string, imageName: string) {
-  return getCategory(caseItem, categoryId)?.images.find((image) => image.name === imageName);
+function unionNames(lists: string[][]) {
+  return Array.from(new Set(lists.flat())).sort(naturalSort);
+}
+
+function getSlotImage(caseItem: ImageCase | undefined, categoryId: string, imageKey: string, matchMode: ImageMatchMode) {
+  const images = getCategoryImages(caseItem, categoryId);
+
+  if (matchMode === "index") {
+    const index = Number(imageKey);
+    return Number.isInteger(index) && index >= 0 ? images[index] : undefined;
+  }
+
+  return images.find((image) => image.name === imageKey);
 }
 
 function clamp01(value: number) {
@@ -131,6 +175,8 @@ export default function Home() {
   const [isAnimationExporting, setIsAnimationExporting] = useState(false);
   const [stillFormat, setStillFormat] = useState<StillFormat>("png");
   const [animationFormat, setAnimationFormat] = useState<AnimationFormat>("webm");
+  const [subfolderMode, setSubfolderMode] = useState<SubfolderMode>("shared");
+  const [imageMatchMode, setImageMatchMode] = useState<ImageMatchMode>("name");
   const [supportsMp4Export, setSupportsMp4Export] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
   const [animationStart, setAnimationStart] = useState("");
@@ -172,18 +218,33 @@ export default function Home() {
       return [];
     }
 
-    return intersectNames(selectedCases.map((caseItem) => caseItem.categories.map((category) => category.id)));
-  }, [selectedCases]);
+    const categoryLists = selectedCases.map((caseItem) => caseItem.categories.map((category) => category.id));
+    return subfolderMode === "shared" ? intersectNames(categoryLists) : unionNames(categoryLists);
+  }, [selectedCases, subfolderMode]);
 
-  const imageOptions = useMemo(() => {
+  const exactNameOptions = useMemo(() => {
     if (selectedCases.length === 0 || !categoryId) {
       return [];
     }
 
-    return intersectNames(
-      selectedCases.map((caseItem) => getCategory(caseItem, categoryId)?.images.map((image) => image.name) ?? []),
-    );
+    return intersectNames(selectedCases.map((caseItem) => getCategoryImages(caseItem, categoryId).map((image) => image.name)));
   }, [categoryId, selectedCases]);
+
+  const indexImageOptions = useMemo(() => {
+    if (selectedCases.length === 0 || !categoryId) {
+      return [];
+    }
+
+    const maxLength = Math.max(0, ...selectedCases.map((caseItem) => getCategoryImages(caseItem, categoryId).length));
+    return Array.from({ length: maxLength }, (_, index) => String(index));
+  }, [categoryId, selectedCases]);
+
+  const effectiveImageMatchMode: ImageMatchMode =
+    imageMatchMode === "name" && exactNameOptions.length === 0 && indexImageOptions.length > 0 ? "index" : imageMatchMode;
+
+  const imageOptions = useMemo(() => {
+    return effectiveImageMatchMode === "name" ? exactNameOptions : indexImageOptions;
+  }, [effectiveImageMatchMode, exactNameOptions, indexImageOptions]);
 
   const activeIndex = Math.max(0, imageOptions.indexOf(imageName));
 
@@ -220,6 +281,20 @@ export default function Home() {
 
   const effectiveFps = 1000 / frameDurationMs;
   const totalDurationSeconds = (animationRange.length * frameDurationMs) / 1000;
+  const showSubfolderSelector = categoryOptions.length > 1 || categoryOptions.some((category) => category !== "__root__");
+
+  function getImageOptionLabel(imageKey: string) {
+    if (effectiveImageMatchMode === "name") {
+      return imageKey;
+    }
+
+    const index = Number(imageKey);
+    const firstImage = selectedCases
+      .map((caseItem) => getCategoryImages(caseItem, categoryId)[index])
+      .find(Boolean);
+
+    return firstImage ? `${index + 1}: ${firstImage.name}` : `Image ${index + 1}`;
+  }
 
   const loadServerLibrary = useCallback(async () => {
     setError(null);
@@ -264,6 +339,12 @@ export default function Home() {
     }
   }, [zoom]);
 
+  useEffect(() => {
+    if (imageMatchMode === "name" && exactNameOptions.length === 0 && indexImageOptions.length > 0) {
+      setImageMatchMode("index");
+    }
+  }, [exactNameOptions.length, imageMatchMode, indexImageOptions.length]);
+
   const toggleFullscreen = useCallback(async () => {
     try {
       if (document.fullscreenElement) {
@@ -281,7 +362,7 @@ export default function Home() {
       return;
     }
 
-    setSlots(library.cases.slice(0, 2).map(makeSlot));
+    setSlots(getInitialCases(library.cases).map(makeSlot));
   }, [library, slots.length]);
 
   useEffect(() => {
@@ -471,7 +552,7 @@ export default function Home() {
     return slots
       .map((slot) => {
         const caseItem = casesById.get(slot.caseId);
-        const image = getSlotImage(caseItem, categoryId, frameName);
+        const image = getSlotImage(caseItem, categoryId, frameName, effectiveImageMatchMode);
         return image
           ? {
               slotId: slot.id,
@@ -921,12 +1002,13 @@ export default function Home() {
     for (const file of imageFiles) {
       const parts = (file.webkitRelativePath || file.name).split("/").filter(Boolean);
 
-      if (parts.length < 3) {
+      if (parts.length < 2) {
         continue;
       }
 
-      const caseName = parts[1];
-      const category = parts.slice(2, -1).join("/") || "__root__";
+      const hasFolderAboveFile = parts.length >= 3;
+      const caseName = hasFolderAboveFile ? parts[1] : rootName;
+      const category = hasFolderAboveFile ? parts.slice(2, -1).join("/") || "__root__" : "__root__";
       const caseGroups = groups.get(caseName) ?? new Map<string, ImageItem[]>();
       const categoryImages = caseGroups.get(category) ?? [];
       categoryImages.push({
@@ -956,7 +1038,7 @@ export default function Home() {
       rootName,
       cases: localCases,
     });
-    setSlots(localCases.slice(0, 2).map(makeSlot));
+    setSlots(getInitialCases(localCases).map(makeSlot));
     setError(null);
     event.target.value = "";
   }
@@ -975,7 +1057,8 @@ export default function Home() {
       drawComparisonFrame(context, canvas, exportItems, loadedImages, true);
 
       const link = document.createElement("a");
-      const safeName = imageName.replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_");
+      const currentLabel = getImageOptionLabel(imageName);
+      const safeName = currentLabel.replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_");
       const blob = await canvasToBlob(canvas, getStillMimeType(stillFormat));
       const url = URL.createObjectURL(blob);
       link.download = `cfd-comparison-${safeName}-${exportItems.length}up.${stillFormat === "jpeg" ? "jpg" : stillFormat}`;
@@ -1066,7 +1149,7 @@ export default function Home() {
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const safeName = categoryId.replace(/[^\w.-]+/g, "_") || "animation";
+      const safeName = `${categoryId}-${effectiveImageMatchMode}`.replace(/[^\w.-]+/g, "_") || "animation";
       link.download = `cfd-animation-${safeName}-${animationRange.length}frames.${animationFormat}`;
       link.href = url;
       link.click();
@@ -1308,7 +1391,7 @@ export default function Home() {
               <select value={animationStart} onChange={(event) => setAnimationStart(event.target.value)}>
                 {imageOptions.map((image) => (
                   <option key={image} value={image}>
-                    {image}
+                    {getImageOptionLabel(image)}
                   </option>
                 ))}
               </select>
@@ -1319,7 +1402,7 @@ export default function Home() {
               <select value={animationEnd} onChange={(event) => setAnimationEnd(event.target.value)}>
                 {imageOptions.map((image) => (
                   <option key={image} value={image}>
-                    {image}
+                    {getImageOptionLabel(image)}
                   </option>
                 ))}
               </select>
@@ -1437,23 +1520,41 @@ export default function Home() {
       {error ? <div className="notice">{error}</div> : null}
 
       <section className="control-band">
-        <label className="field">
-          <span>Image subfolder</span>
-          <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-            {categoryOptions.map((category) => (
-              <option key={category} value={category}>
-                {category === "__root__" ? "Root" : category}
-              </option>
-            ))}
+        {showSubfolderSelector ? (
+          <label className="field">
+            <span>Image subfolder</span>
+            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category === "__root__" ? "Root" : category}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <label className="field compact-field">
+          <span>Subfolders</span>
+          <select value={subfolderMode} onChange={(event) => setSubfolderMode(event.target.value as SubfolderMode)}>
+            <option value="shared">Shared only</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+
+        <label className="field compact-field">
+          <span>Image match</span>
+          <select value={imageMatchMode} onChange={(event) => setImageMatchMode(event.target.value as ImageMatchMode)}>
+            <option value="name">Same names</option>
+            <option value="index">Folder order</option>
           </select>
         </label>
 
         <label className="field image-field">
-          <span>Image</span>
+          <span>{effectiveImageMatchMode === "name" ? "Image" : "Image position"}</span>
           <select value={imageName} onChange={(event) => setImageName(event.target.value)}>
             {imageOptions.map((image) => (
               <option key={image} value={image}>
-                {image}
+                {getImageOptionLabel(image)}
               </option>
             ))}
           </select>
@@ -1535,7 +1636,7 @@ export default function Home() {
       <section className={`viewer-grid count-${slots.length}`}>
         {slots.map((slot) => {
           const caseItem = casesById.get(slot.caseId);
-          const image = getSlotImage(caseItem, categoryId, imageName);
+          const image = getSlotImage(caseItem, categoryId, imageName, effectiveImageMatchMode);
           const aspect = image ? aspectByUrl[image.url] ?? 1 : 1;
 
           return (

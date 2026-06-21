@@ -29,7 +29,12 @@ export async function GET(request: NextRequest) {
   }
 
   const root = path.resolve(getImageRoot());
-  const imagePath = path.resolve(root, caseName, category === "__root__" ? "" : category, file);
+  const imagePath = path.resolve(
+    root,
+    caseName === "__root__" ? "" : caseName,
+    category === "__root__" ? "" : category,
+    file,
+  );
 
   if (!isInside(root, imagePath)) {
     return NextResponse.json({ error: "Image path escapes the configured root." }, { status: 400 });

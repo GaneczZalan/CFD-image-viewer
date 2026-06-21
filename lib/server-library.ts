@@ -64,6 +64,21 @@ async function walkImages(folder: string, base: string, groups: Map<string, Imag
   }
 }
 
+function categoriesFromGroups(caseName: string, groups: Map<string, ImageItem[]>) {
+  return [...groups.entries()]
+    .map(([category, images]) => ({
+      id: category,
+      name: category === "__root__" ? "Root" : category,
+      images: images
+        .sort((a, b) => sortNatural(a.name, b.name))
+        .map((image) => ({
+          ...image,
+          url: `/api/image?case=${encodeURIComponent(caseName)}&category=${encodeURIComponent(category)}&file=${encodeURIComponent(image.name)}`,
+        })),
+    }))
+    .sort((a, b) => sortNatural(a.name, b.name));
+}
+
 export async function scanLibrary(root: string): Promise<ImageLibrary> {
   const resolvedRoot = path.resolve(root);
   const rootStat = await stat(resolvedRoot);
@@ -73,6 +88,10 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
   }
 
   const entries = await readdir(resolvedRoot, { withFileTypes: true });
+  const rootImageFiles = entries
+    .filter((entry) => entry.isFile() && isImageFile(entry.name))
+    .map((entry) => entry.name)
+    .sort(sortNatural);
   const caseDirs = entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
@@ -80,23 +99,30 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
 
   const cases: ImageCase[] = [];
 
+  if (rootImageFiles.length > 0) {
+    const rootCaseName = path.basename(resolvedRoot);
+    cases.push({
+      id: "__root__",
+      name: rootCaseName,
+      categories: [
+        {
+          id: "__root__",
+          name: "Root",
+          images: rootImageFiles.map((fileName) => ({
+            name: fileName,
+            url: `/api/image?case=${encodeURIComponent("__root__")}&category=${encodeURIComponent("__root__")}&file=${encodeURIComponent(fileName)}`,
+          })),
+        },
+      ],
+    });
+  }
+
   for (const caseName of caseDirs) {
     const casePath = path.join(resolvedRoot, caseName);
     const groups = new Map<string, ImageItem[]>();
     await walkImages(casePath, casePath, groups);
 
-    const categories = [...groups.entries()]
-      .map(([category, images]) => ({
-        id: category,
-        name: category === "__root__" ? "Root" : category,
-        images: images
-          .sort((a, b) => sortNatural(a.name, b.name))
-          .map((image) => ({
-            ...image,
-            url: `/api/image?case=${encodeURIComponent(caseName)}&category=${encodeURIComponent(category)}&file=${encodeURIComponent(image.name)}`,
-          })),
-      }))
-      .sort((a, b) => sortNatural(a.name, b.name));
+    const categories = categoriesFromGroups(caseName, groups);
 
     if (categories.length > 0) {
       cases.push({

@@ -370,6 +370,10 @@ h1 {
   min-width: 190px;
 }
 
+.compact-field {
+  min-width: 132px;
+}
+
 .image-field {
   min-width: min(460px, 100%);
   flex: 1;
