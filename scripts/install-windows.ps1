@@ -1,6 +1,10 @@
 param(
   [int]$Port = 3001,
   [string]$ImageRoot = "",
+  [ValidateSet("local", "ssh", "vpn")]
+  [string]$AccessMode = "local",
+  [string]$SshUser = "user",
+  [string]$SshHost = "server-address",
   [switch]$Start
 )
 
@@ -57,12 +61,15 @@ npm.cmd run build
 Write-Host ""
 Write-Host "Install complete." -ForegroundColor Green
 Write-Host "Start command:"
-$startCommand = "powershell -ExecutionPolicy Bypass -File scripts\start-windows.ps1 -Port $Port"
+$startCommand = "powershell -ExecutionPolicy Bypass -File scripts\start-windows.ps1 -Port $Port -AccessMode $AccessMode"
 if ($ImageRoot) {
   $startCommand = "$startCommand -ImageRoot `"$ImageRoot`""
+}
+if ($AccessMode -eq "ssh") {
+  $startCommand = "$startCommand -SshUser $SshUser -SshHost $SshHost"
 }
 Write-Host "  $startCommand"
 
 if ($Start) {
-  & (Join-Path $projectRoot "scripts\start-windows.ps1") -Port $Port -ImageRoot $ImageRoot
+  & (Join-Path $projectRoot "scripts\start-windows.ps1") -Port $Port -ImageRoot $ImageRoot -AccessMode $AccessMode -SshUser $SshUser -SshHost $SshHost
 }

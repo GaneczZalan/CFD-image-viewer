@@ -4,6 +4,9 @@ set -euo pipefail
 PORT="${PORT:-3001}"
 IMAGE_ROOT="${CFD_IMAGE_ROOT:-}"
 START_AFTER_INSTALL="${START_AFTER_INSTALL:-0}"
+ACCESS_MODE="${ACCESS_MODE:-local}"
+SSH_USER="${SSH_USER:-user}"
+SSH_HOST="${SSH_HOST:-server-address}"
 REQUIRED_NODE_MAJOR=20
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -29,6 +32,14 @@ install_node_with_apt() {
 }
 
 cd "$PROJECT_ROOT"
+
+case "$ACCESS_MODE" in
+  local|ssh|vpn) ;;
+  *)
+    echo "ACCESS_MODE must be one of: local, ssh, vpn"
+    exit 1
+    ;;
+esac
 
 echo "CFD Viewer server installer"
 echo "Project: $PROJECT_ROOT"
@@ -56,11 +67,11 @@ echo ""
 echo "Install complete."
 echo "Start command:"
 if [ -n "$IMAGE_ROOT" ]; then
-  echo "  CFD_IMAGE_ROOT=\"$IMAGE_ROOT\" PORT=$PORT ./scripts/start-linux.sh"
+  echo "  CFD_IMAGE_ROOT=\"$IMAGE_ROOT\" PORT=$PORT ACCESS_MODE=$ACCESS_MODE SSH_USER=$SSH_USER SSH_HOST=$SSH_HOST ./scripts/start-linux.sh"
 else
-  echo "  PORT=$PORT ./scripts/start-linux.sh"
+  echo "  PORT=$PORT ACCESS_MODE=$ACCESS_MODE SSH_USER=$SSH_USER SSH_HOST=$SSH_HOST ./scripts/start-linux.sh"
 fi
 
 if [ "$START_AFTER_INSTALL" = "1" ]; then
-  PORT="$PORT" CFD_IMAGE_ROOT="$IMAGE_ROOT" ./scripts/start-linux.sh
+  PORT="$PORT" CFD_IMAGE_ROOT="$IMAGE_ROOT" ACCESS_MODE="$ACCESS_MODE" SSH_USER="$SSH_USER" SSH_HOST="$SSH_HOST" ./scripts/start-linux.sh
 fi

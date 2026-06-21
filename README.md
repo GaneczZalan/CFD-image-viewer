@@ -48,21 +48,27 @@ Copy this project folder to the server, then use the installer scripts in `scrip
 Windows:
 
 ```powershell
-install-windows.bat -Port 3001 -ImageRoot "D:\CFD\images"
-start-windows.bat -Port 3001 -ImageRoot "D:\CFD\images"
+install-windows.bat -Port 3001 -ImageRoot "D:\CFD\images" -AccessMode ssh
+start-windows.bat -Port 3001 -ImageRoot "D:\CFD\images" -AccessMode ssh -SshUser zalan -SshHost cfd-server.example.com
 ```
 
 Linux:
 
 ```bash
 chmod +x scripts/*.sh
-CFD_IMAGE_ROOT="/srv/cfd/images" PORT=3001 ./scripts/install-linux.sh
-CFD_IMAGE_ROOT="/srv/cfd/images" PORT=3001 ./scripts/start-linux.sh
+CFD_IMAGE_ROOT="/srv/cfd/images" ACCESS_MODE=ssh PORT=3001 ./scripts/install-linux.sh
+CFD_IMAGE_ROOT="/srv/cfd/images" ACCESS_MODE=ssh PORT=3001 SSH_USER=zalan SSH_HOST=cfd-server.example.com ./scripts/start-linux.sh
 ```
 
 If `CFD_IMAGE_ROOT` is not set, the app uses the local `images` folder next to the code.
 
-See `DEPLOYMENT.md` for the full server setup notes.
+Access modes:
+
+- `local`: same machine only.
+- `ssh`: safe SSH tunnel access.
+- `vpn`: bind to the private network; VPN/Twingate setup is external.
+
+See `DEPLOYMENT.md` for the full server setup notes and user commands.
 
 ## Viewer Workflow
 
