@@ -24,6 +24,7 @@ type ImageLibrary = {
   source: "server" | "local";
   rootName: string;
   cases: ImageCase[];
+  scanDepth?: number;
 };
 
 type Slot = {
@@ -245,7 +246,16 @@ export default function Home() {
     setError(null);
 
     try {
-      const response = await fetch("/api/library", { cache: "no-store" });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
+      let response: Response;
+
+      try {
+        response = await fetch("/api/library", { cache: "no-store", signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -254,7 +264,13 @@ export default function Home() {
 
       setLibrary(data);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load server image library.");
+      setError(
+        caught instanceof DOMException && caught.name === "AbortError"
+          ? "Image root scan timed out. Restart with a smaller -ScanDepth value or point -ImageRoot closer to the folders you want."
+          : caught instanceof Error
+            ? caught.message
+            : "Could not load server image library.",
+      );
     }
   }, []);
 

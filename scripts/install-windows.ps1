@@ -1,6 +1,7 @@
 param(
   [int]$Port = 3001,
   [string]$ImageRoot = "",
+  [int]$ScanDepth = 4,
   [ValidateSet("local", "ssh", "vpn")]
   [string]$AccessMode = "local",
   [string]$SshUser = "user",
@@ -65,11 +66,12 @@ $startCommand = "powershell -ExecutionPolicy Bypass -File scripts\start-windows.
 if ($ImageRoot) {
   $startCommand = "$startCommand -ImageRoot `"$ImageRoot`""
 }
+$startCommand = "$startCommand -ScanDepth $ScanDepth"
 if ($AccessMode -eq "ssh") {
   $startCommand = "$startCommand -SshUser $SshUser -SshHost $SshHost"
 }
 Write-Host "  $startCommand"
 
 if ($Start) {
-  & (Join-Path $projectRoot "scripts\start-windows.ps1") -Port $Port -ImageRoot $ImageRoot -AccessMode $AccessMode -SshUser $SshUser -SshHost $SshHost
+  & (Join-Path $projectRoot "scripts\start-windows.ps1") -Port $Port -ImageRoot $ImageRoot -ScanDepth $ScanDepth -AccessMode $AccessMode -SshUser $SshUser -SshHost $SshHost
 }

@@ -22,6 +22,7 @@ export type ImageLibrary = {
   source: "server";
   rootName: string;
   cases: ImageCase[];
+  scanDepth: number;
 };
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
@@ -38,8 +39,49 @@ function sortNatural(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
-async function collectImageFolders(folder: string, root: string, cases: ImageCase[]) {
-  const entries = await readdir(folder, { withFileTypes: true });
+function getScanDepth() {
+  const rawDepth = process.env.CFD_SCAN_DEPTH;
+  const parsedDepth = rawDepth ? Number(rawDepth) : 4;
+
+  if (!Number.isFinite(parsedDepth) || parsedDepth < 0) {
+    return 4;
+  }
+
+  return Math.floor(parsedDepth);
+}
+
+function getScanTimeoutMs() {
+  const rawTimeout = process.env.CFD_SCAN_TIMEOUT_MS;
+  const parsedTimeout = rawTimeout ? Number(rawTimeout) : 15000;
+
+  if (!Number.isFinite(parsedTimeout) || parsedTimeout < 1000) {
+    return 15000;
+  }
+
+  return Math.floor(parsedTimeout);
+}
+
+function assertScanDeadline(deadline: number) {
+  if (Date.now() > deadline) {
+    throw new Error(
+      "Image root scan timed out. Use a smaller -ScanDepth value or point -ImageRoot closer to the result folders.",
+    );
+  }
+}
+
+async function collectImageFolders(folder: string, root: string, cases: ImageCase[], depth: number, maxDepth: number, deadline: number) {
+  assertScanDeadline(deadline);
+
+  let entries;
+  try {
+    entries = await readdir(folder, { withFileTypes: true });
+  } catch (error) {
+    if (depth === 0) {
+      throw error;
+    }
+
+    return;
+  }
   const imageFiles = entries
     .filter((entry) => entry.isFile() && isImageFile(entry.name))
     .map((entry) => entry.name)
@@ -66,9 +108,13 @@ async function collectImageFolders(folder: string, root: string, cases: ImageCas
     });
   }
 
+  if (depth >= maxDepth) {
+    return;
+  }
+
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      await collectImageFolders(path.join(folder, entry.name), root, cases);
+      await collectImageFolders(path.join(folder, entry.name), root, cases, depth + 1, maxDepth, deadline);
     }
   }
 }
@@ -82,12 +128,16 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
   }
 
   const cases: ImageCase[] = [];
-  await collectImageFolders(resolvedRoot, resolvedRoot, cases);
+  const scanDepth = getScanDepth();
+  const deadline = Date.now() + getScanTimeoutMs();
+
+  await collectImageFolders(resolvedRoot, resolvedRoot, cases, 0, scanDepth, deadline);
   cases.sort((a, b) => sortNatural(a.name, b.name));
 
   return {
     source: "server",
     rootName: path.basename(resolvedRoot),
     cases,
+    scanDepth,
   };
 }

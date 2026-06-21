@@ -31,7 +31,7 @@ start-windows.bat -Port 3001
 Start with real CFD images:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start-windows.ps1 -Port 3001 -ImageRoot "D:\CFD\images"
+powershell -ExecutionPolicy Bypass -File scripts\start-windows.ps1 -Port 3001 -ImageRoot "D:\CFD\images" -ScanDepth 4
 ```
 
 Install and start immediately:
@@ -58,7 +58,7 @@ PORT=3001 ./scripts/start-linux.sh
 Start with real CFD images:
 
 ```bash
-CFD_IMAGE_ROOT="/srv/cfd/images" PORT=3001 ./scripts/start-linux.sh
+CFD_IMAGE_ROOT="/srv/cfd/images" CFD_SCAN_DEPTH=4 PORT=3001 ./scripts/start-linux.sh
 ```
 
 Install and start immediately:
@@ -159,5 +159,6 @@ http://cfd-viewer.internal:3001
 - The installer uses `npm ci`, so keep `package-lock.json` with the project.
 - `CFD_IMAGE_ROOT` / `-ImageRoot` is the only folder configured at startup. The viewer then lets users select any folders under that root that directly contain images.
 - Images are compared by exact shared filename across the selected folders.
+- `CFD_SCAN_DEPTH` / `-ScanDepth` limits how deep the app scans under the image root. The default is `4`. Use `2` for layouts like `root\case\image.png` or `root\case\result_type\image.png`; raise it only if your images are deeper.
 - If `CFD_IMAGE_ROOT` is not set, the app uses the local `images` folder.
 - Do not use `vpn` mode on the public internet without separate authentication/reverse-proxy protection.

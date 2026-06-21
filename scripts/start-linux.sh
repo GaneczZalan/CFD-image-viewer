@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PORT="${PORT:-3001}"
+CFD_SCAN_DEPTH="${CFD_SCAN_DEPTH:-4}"
 ACCESS_MODE="${ACCESS_MODE:-local}"
 SSH_USER="${SSH_USER:-user}"
 SSH_HOST="${SSH_HOST:-server-address}"
@@ -21,6 +22,7 @@ if [ -n "${CFD_IMAGE_ROOT:-}" ]; then
 else
   echo "Using bundled ./images folder. Set CFD_IMAGE_ROOT to use server CFD folders."
 fi
+echo "Using CFD_SCAN_DEPTH=$CFD_SCAN_DEPTH"
 
 if [ "$ACCESS_MODE" = "vpn" ]; then
   BIND_HOST="0.0.0.0"

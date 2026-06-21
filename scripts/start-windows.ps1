@@ -1,6 +1,7 @@
 param(
   [int]$Port = 3001,
   [string]$ImageRoot = "",
+  [int]$ScanDepth = 4,
   [ValidateSet("local", "ssh", "vpn")]
   [string]$AccessMode = "local",
   [string]$SshUser = "user",
@@ -18,6 +19,9 @@ if ($ImageRoot) {
   Remove-Item Env:\CFD_IMAGE_ROOT -ErrorAction SilentlyContinue
   Write-Host "Using bundled ./images folder. Pass -ImageRoot to use server CFD folders."
 }
+
+$env:CFD_SCAN_DEPTH = "$ScanDepth"
+Write-Host "Using CFD_SCAN_DEPTH=$ScanDepth"
 
 $bindHost = if ($AccessMode -eq "vpn") { "0.0.0.0" } else { "127.0.0.1" }
 $localUrl = "http://localhost:$Port"

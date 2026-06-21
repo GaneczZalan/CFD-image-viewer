@@ -15,7 +15,7 @@ Open:
 http://localhost:3001
 ```
 
-The app scans `./images` by default. Every folder under the image root that directly contains images becomes selectable in the viewer.
+The app scans `./images` by default. Every folder under the image root that directly contains images becomes selectable in the viewer. Server scans use a configurable depth limit so large result drives do not keep the page stuck on loading.
 
 It supports layouts like:
 
@@ -51,15 +51,15 @@ Windows:
 
 ```powershell
 install-windows.bat -Port 3001 -ImageRoot "D:\CFD\images" -AccessMode ssh
-start-windows.bat -Port 3001 -ImageRoot "D:\CFD\images" -AccessMode ssh -SshUser zalan -SshHost cfd-server.example.com
+start-windows.bat -Port 3001 -ImageRoot "D:\CFD\images" -ScanDepth 4 -AccessMode ssh -SshUser zalan -SshHost cfd-server.example.com
 ```
 
 Linux:
 
 ```bash
 chmod +x scripts/*.sh
-CFD_IMAGE_ROOT="/srv/cfd/images" ACCESS_MODE=ssh PORT=3001 ./scripts/install-linux.sh
-CFD_IMAGE_ROOT="/srv/cfd/images" ACCESS_MODE=ssh PORT=3001 SSH_USER=zalan SSH_HOST=cfd-server.example.com ./scripts/start-linux.sh
+CFD_IMAGE_ROOT="/srv/cfd/images" CFD_SCAN_DEPTH=4 ACCESS_MODE=ssh PORT=3001 ./scripts/install-linux.sh
+CFD_IMAGE_ROOT="/srv/cfd/images" CFD_SCAN_DEPTH=4 ACCESS_MODE=ssh PORT=3001 SSH_USER=zalan SSH_HOST=cfd-server.example.com ./scripts/start-linux.sh
 ```
 
 If `CFD_IMAGE_ROOT` is not set, the app uses the local `images` folder next to the code.
