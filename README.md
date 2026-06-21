@@ -15,9 +15,9 @@ Open:
 http://localhost:3001
 ```
 
-The app scans `./images` by default.
+The app scans `./images` by default. Every folder under the image root that directly contains images becomes selectable in the viewer.
 
-It supports two common layouts:
+It supports layouts like:
 
 ```text
 images/
@@ -30,6 +30,8 @@ images/
     #VelMag/
       #VelMag00000.png
 ```
+
+In that layout you can directly select `Case_A/#VelMag`, `Case_B/#VelMag`, `Case_A/#SCp`, etc.
 
 ```text
 images/
@@ -72,14 +74,12 @@ See `DEPLOYMENT.md` for the full server setup notes and user commands.
 
 ## Viewer Workflow
 
-- Use **Open main folder** for quick browser-side testing by selecting a local root folder that contains simulation subfolders.
-- Use **Subfolders** to choose only shared subfolders, or all available subfolders.
-- Use **Image subfolder** to choose result groups such as `#VelMag`, `#SCp`, `Monitor_Pictures`, or `Root`.
-- Use **Image match** to choose between exact shared filenames and folder-order/index matching.
-- Use **Image** or **Image position** to choose the visible image.
+- Use **Open image root** for quick browser-side testing by selecting a local root folder.
+- Use **Add folder** and each folder selector to compare any folders found under that root.
+- Images are matched by exact shared filename across the selected folders.
+- Use **Image** to choose the visible shared image.
 - Use left/right arrow keys to move backward/forward through the image sequence.
 - Use **Animation preview** to select first/last frames and play the sequence across all visible folders.
 - Timing can be controlled by FPS, per-frame milliseconds, or total animation seconds.
-- Use **Add folder** to compare up to four simulation folders.
 - Edit labels above each image. Defaults come from folder names.
 - Use **Download view** to export the visible comparison as a PNG.

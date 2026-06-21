@@ -38,45 +38,39 @@ function sortNatural(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
-async function walkImages(folder: string, base: string, groups: Map<string, ImageItem[]>) {
+async function collectImageFolders(folder: string, root: string, cases: ImageCase[]) {
   const entries = await readdir(folder, { withFileTypes: true });
+  const imageFiles = entries
+    .filter((entry) => entry.isFile() && isImageFile(entry.name))
+    .map((entry) => entry.name)
+    .sort(sortNatural);
+
+  if (imageFiles.length > 0) {
+    const relativeFolder = path.relative(root, folder).split(path.sep).join("/");
+    const caseId = relativeFolder === "" ? "__root__" : relativeFolder;
+    const caseName = relativeFolder === "" ? path.basename(root) : relativeFolder;
+
+    cases.push({
+      id: caseId,
+      name: caseName,
+      categories: [
+        {
+          id: "__root__",
+          name: "Images",
+          images: imageFiles.map((fileName) => ({
+            name: fileName,
+            url: `/api/image?case=${encodeURIComponent(caseId)}&category=${encodeURIComponent("__root__")}&file=${encodeURIComponent(fileName)}`,
+          })),
+        },
+      ],
+    });
+  }
 
   for (const entry of entries) {
-    const fullPath = path.join(folder, entry.name);
-
     if (entry.isDirectory()) {
-      await walkImages(fullPath, base, groups);
-      continue;
+      await collectImageFolders(path.join(folder, entry.name), root, cases);
     }
-
-    if (!entry.isFile() || !isImageFile(entry.name)) {
-      continue;
-    }
-
-    const relativeFolder = path.dirname(path.relative(base, fullPath));
-    const category = relativeFolder === "." ? "__root__" : relativeFolder.split(path.sep).join("/");
-    const items = groups.get(category) ?? [];
-    items.push({
-      name: entry.name,
-      url: "",
-    });
-    groups.set(category, items);
   }
-}
-
-function categoriesFromGroups(caseName: string, groups: Map<string, ImageItem[]>) {
-  return [...groups.entries()]
-    .map(([category, images]) => ({
-      id: category,
-      name: category === "__root__" ? "Root" : category,
-      images: images
-        .sort((a, b) => sortNatural(a.name, b.name))
-        .map((image) => ({
-          ...image,
-          url: `/api/image?case=${encodeURIComponent(caseName)}&category=${encodeURIComponent(category)}&file=${encodeURIComponent(image.name)}`,
-        })),
-    }))
-    .sort((a, b) => sortNatural(a.name, b.name));
 }
 
 export async function scanLibrary(root: string): Promise<ImageLibrary> {
@@ -87,51 +81,9 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
     throw new Error(`CFD_IMAGE_ROOT is not a folder: ${resolvedRoot}`);
   }
 
-  const entries = await readdir(resolvedRoot, { withFileTypes: true });
-  const rootImageFiles = entries
-    .filter((entry) => entry.isFile() && isImageFile(entry.name))
-    .map((entry) => entry.name)
-    .sort(sortNatural);
-  const caseDirs = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort(sortNatural);
-
   const cases: ImageCase[] = [];
-
-  if (rootImageFiles.length > 0) {
-    const rootCaseName = path.basename(resolvedRoot);
-    cases.push({
-      id: "__root__",
-      name: rootCaseName,
-      categories: [
-        {
-          id: "__root__",
-          name: "Root",
-          images: rootImageFiles.map((fileName) => ({
-            name: fileName,
-            url: `/api/image?case=${encodeURIComponent("__root__")}&category=${encodeURIComponent("__root__")}&file=${encodeURIComponent(fileName)}`,
-          })),
-        },
-      ],
-    });
-  }
-
-  for (const caseName of caseDirs) {
-    const casePath = path.join(resolvedRoot, caseName);
-    const groups = new Map<string, ImageItem[]>();
-    await walkImages(casePath, casePath, groups);
-
-    const categories = categoriesFromGroups(caseName, groups);
-
-    if (categories.length > 0) {
-      cases.push({
-        id: caseName,
-        name: caseName,
-        categories,
-      });
-    }
-  }
+  await collectImageFolders(resolvedRoot, resolvedRoot, cases);
+  cases.sort((a, b) => sortNatural(a.name, b.name));
 
   return {
     source: "server",

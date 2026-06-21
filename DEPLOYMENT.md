@@ -157,5 +157,7 @@ http://cfd-viewer.internal:3001
 
 - Node.js 20 or newer is required.
 - The installer uses `npm ci`, so keep `package-lock.json` with the project.
+- `CFD_IMAGE_ROOT` / `-ImageRoot` is the only folder configured at startup. The viewer then lets users select any folders under that root that directly contain images.
+- Images are compared by exact shared filename across the selected folders.
 - If `CFD_IMAGE_ROOT` is not set, the app uses the local `images` folder.
 - Do not use `vpn` mode on the public internet without separate authentication/reverse-proxy protection.

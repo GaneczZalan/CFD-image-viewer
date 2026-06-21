@@ -36,8 +36,6 @@ type Theme = "light" | "dark";
 type TimingMode = "fps" | "frame" | "total";
 type StillFormat = "png" | "jpeg" | "webp";
 type AnimationFormat = "webm" | "mp4";
-type SubfolderMode = "shared" | "all";
-type ImageMatchMode = "name" | "index";
 type DrawTool = "none" | "pencil" | "arrow" | "line" | "rect" | "roundRect" | "eraser";
 type Point = { x: number; y: number };
 type DrawTargets = "all" | string[];
@@ -61,8 +59,12 @@ function makeSlot(caseItem: ImageCase): Slot {
   };
 }
 
-function countSharedCategories(cases: ImageCase[]) {
-  return intersectNames(cases.map((caseItem) => caseItem.categories.map((category) => category.id))).length;
+function getRootImages(caseItem: ImageCase | undefined) {
+  return caseItem?.categories[0]?.images ?? [];
+}
+
+function countSharedImageNames(cases: ImageCase[]) {
+  return intersectNames(cases.map((caseItem) => getRootImages(caseItem).map((image) => image.name))).length;
 }
 
 function getInitialCases(cases: ImageCase[]) {
@@ -71,12 +73,12 @@ function getInitialCases(cases: ImageCase[]) {
   }
 
   let bestPair = cases.slice(0, 2);
-  let bestScore = countSharedCategories(bestPair);
+  let bestScore = countSharedImageNames(bestPair);
 
   for (let firstIndex = 0; firstIndex < cases.length; firstIndex += 1) {
     for (let secondIndex = firstIndex + 1; secondIndex < cases.length; secondIndex += 1) {
       const pair = [cases[firstIndex], cases[secondIndex]];
-      const score = countSharedCategories(pair);
+      const score = countSharedImageNames(pair);
 
       if (score > bestScore) {
         bestPair = pair;
@@ -92,14 +94,6 @@ function naturalSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
-function getCategory(caseItem: ImageCase | undefined, categoryId: string) {
-  return caseItem?.categories.find((category) => category.id === categoryId);
-}
-
-function getCategoryImages(caseItem: ImageCase | undefined, categoryId: string) {
-  return getCategory(caseItem, categoryId)?.images ?? [];
-}
-
 function intersectNames(lists: string[][]) {
   if (lists.length === 0) {
     return [];
@@ -109,18 +103,8 @@ function intersectNames(lists: string[][]) {
   return first.filter((name) => rest.every((list) => list.includes(name))).sort(naturalSort);
 }
 
-function unionNames(lists: string[][]) {
-  return Array.from(new Set(lists.flat())).sort(naturalSort);
-}
-
-function getSlotImage(caseItem: ImageCase | undefined, categoryId: string, imageKey: string, matchMode: ImageMatchMode) {
-  const images = getCategoryImages(caseItem, categoryId);
-
-  if (matchMode === "index") {
-    const index = Number(imageKey);
-    return Number.isInteger(index) && index >= 0 ? images[index] : undefined;
-  }
-
+function getSlotImage(caseItem: ImageCase | undefined, imageKey: string) {
+  const images = getRootImages(caseItem);
   return images.find((image) => image.name === imageKey);
 }
 
@@ -169,14 +153,11 @@ export default function Home() {
   const [library, setLibrary] = useState<ImageLibrary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [categoryId, setCategoryId] = useState("");
   const [imageName, setImageName] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isAnimationExporting, setIsAnimationExporting] = useState(false);
   const [stillFormat, setStillFormat] = useState<StillFormat>("png");
   const [animationFormat, setAnimationFormat] = useState<AnimationFormat>("webm");
-  const [subfolderMode, setSubfolderMode] = useState<SubfolderMode>("shared");
-  const [imageMatchMode, setImageMatchMode] = useState<ImageMatchMode>("name");
   const [supportsMp4Export, setSupportsMp4Export] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
   const [animationStart, setAnimationStart] = useState("");
@@ -213,38 +194,13 @@ export default function Home() {
     return slots.map((slot) => casesById.get(slot.caseId)).filter(Boolean) as ImageCase[];
   }, [casesById, slots]);
 
-  const categoryOptions = useMemo(() => {
+  const imageOptions = useMemo(() => {
     if (selectedCases.length === 0) {
       return [];
     }
 
-    const categoryLists = selectedCases.map((caseItem) => caseItem.categories.map((category) => category.id));
-    return subfolderMode === "shared" ? intersectNames(categoryLists) : unionNames(categoryLists);
-  }, [selectedCases, subfolderMode]);
-
-  const exactNameOptions = useMemo(() => {
-    if (selectedCases.length === 0 || !categoryId) {
-      return [];
-    }
-
-    return intersectNames(selectedCases.map((caseItem) => getCategoryImages(caseItem, categoryId).map((image) => image.name)));
-  }, [categoryId, selectedCases]);
-
-  const indexImageOptions = useMemo(() => {
-    if (selectedCases.length === 0 || !categoryId) {
-      return [];
-    }
-
-    const maxLength = Math.max(0, ...selectedCases.map((caseItem) => getCategoryImages(caseItem, categoryId).length));
-    return Array.from({ length: maxLength }, (_, index) => String(index));
-  }, [categoryId, selectedCases]);
-
-  const effectiveImageMatchMode: ImageMatchMode =
-    imageMatchMode === "name" && exactNameOptions.length === 0 && indexImageOptions.length > 0 ? "index" : imageMatchMode;
-
-  const imageOptions = useMemo(() => {
-    return effectiveImageMatchMode === "name" ? exactNameOptions : indexImageOptions;
-  }, [effectiveImageMatchMode, exactNameOptions, indexImageOptions]);
+    return intersectNames(selectedCases.map((caseItem) => getRootImages(caseItem).map((image) => image.name)));
+  }, [selectedCases]);
 
   const activeIndex = Math.max(0, imageOptions.indexOf(imageName));
 
@@ -281,19 +237,8 @@ export default function Home() {
 
   const effectiveFps = 1000 / frameDurationMs;
   const totalDurationSeconds = (animationRange.length * frameDurationMs) / 1000;
-  const showSubfolderSelector = categoryOptions.length > 1 || categoryOptions.some((category) => category !== "__root__");
-
   function getImageOptionLabel(imageKey: string) {
-    if (effectiveImageMatchMode === "name") {
-      return imageKey;
-    }
-
-    const index = Number(imageKey);
-    const firstImage = selectedCases
-      .map((caseItem) => getCategoryImages(caseItem, categoryId)[index])
-      .find(Boolean);
-
-    return firstImage ? `${index + 1}: ${firstImage.name}` : `Image ${index + 1}`;
+    return imageKey;
   }
 
   const loadServerLibrary = useCallback(async () => {
@@ -339,12 +284,6 @@ export default function Home() {
     }
   }, [zoom]);
 
-  useEffect(() => {
-    if (imageMatchMode === "name" && exactNameOptions.length === 0 && indexImageOptions.length > 0) {
-      setImageMatchMode("index");
-    }
-  }, [exactNameOptions.length, imageMatchMode, indexImageOptions.length]);
-
   const toggleFullscreen = useCallback(async () => {
     try {
       if (document.fullscreenElement) {
@@ -364,17 +303,6 @@ export default function Home() {
 
     setSlots(getInitialCases(library.cases).map(makeSlot));
   }, [library, slots.length]);
-
-  useEffect(() => {
-    if (categoryOptions.length === 0) {
-      setCategoryId("");
-      return;
-    }
-
-    if (!categoryOptions.includes(categoryId)) {
-      setCategoryId(categoryOptions[0]);
-    }
-  }, [categoryId, categoryOptions]);
 
   useEffect(() => {
     if (imageOptions.length === 0) {
@@ -552,7 +480,7 @@ export default function Home() {
     return slots
       .map((slot) => {
         const caseItem = casesById.get(slot.caseId);
-        const image = getSlotImage(caseItem, categoryId, frameName, effectiveImageMatchMode);
+        const image = getSlotImage(caseItem, frameName);
         return image
           ? {
               slotId: slot.id,
@@ -996,7 +924,7 @@ export default function Home() {
     }
 
     const imageFiles = files.filter((file) => /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name));
-    const groups = new Map<string, Map<string, ImageItem[]>>();
+    const folders = new Map<string, ImageItem[]>();
     const rootName = imageFiles[0]?.webkitRelativePath?.split("/")?.[0] ?? "Local folder";
 
     for (const file of imageFiles) {
@@ -1006,30 +934,26 @@ export default function Home() {
         continue;
       }
 
-      const hasFolderAboveFile = parts.length >= 3;
-      const caseName = hasFolderAboveFile ? parts[1] : rootName;
-      const category = hasFolderAboveFile ? parts.slice(2, -1).join("/") || "__root__" : "__root__";
-      const caseGroups = groups.get(caseName) ?? new Map<string, ImageItem[]>();
-      const categoryImages = caseGroups.get(category) ?? [];
-      categoryImages.push({
+      const folderName = parts.slice(1, -1).join("/") || rootName;
+      const folderImages = folders.get(folderName) ?? [];
+      folderImages.push({
         name: file.name,
         url: URL.createObjectURL(file),
       });
-      caseGroups.set(category, categoryImages);
-      groups.set(caseName, caseGroups);
+      folders.set(folderName, folderImages);
     }
 
-    const localCases = [...groups.entries()]
-      .map(([caseName, caseGroups]) => ({
-        id: caseName,
-        name: caseName,
-        categories: [...caseGroups.entries()]
-          .map(([category, images]) => ({
-            id: category,
-            name: category === "__root__" ? "Root" : category,
+    const localCases = [...folders.entries()]
+      .map(([folderName, images]) => ({
+        id: folderName,
+        name: folderName,
+        categories: [
+          {
+            id: "__root__",
+            name: "Images",
             images: images.sort((a, b) => naturalSort(a.name, b.name)),
-          }))
-          .sort((a, b) => naturalSort(a.name, b.name)),
+          },
+        ],
       }))
       .sort((a, b) => naturalSort(a.name, b.name));
 
@@ -1044,7 +968,7 @@ export default function Home() {
   }
 
   async function exportMontage() {
-    if (slots.length === 0 || !categoryId || !imageName) {
+    if (slots.length === 0 || !imageName) {
       return;
     }
 
@@ -1149,7 +1073,7 @@ export default function Home() {
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const safeName = `${categoryId}-${effectiveImageMatchMode}`.replace(/[^\w.-]+/g, "_") || "animation";
+      const safeName = (imageName || "animation").replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_");
       link.download = `cfd-animation-${safeName}-${animationRange.length}frames.${animationFormat}`;
       link.href = url;
       link.click();
@@ -1469,7 +1393,7 @@ export default function Home() {
           <p className="eyebrow">CFD Image Viewer</p>
           <h1>Compare simulation folders</h1>
           <p className="source-line">
-            Main folder: {library ? `${library.rootName} (${library.source})` : "Loading..."}
+            Image root: {library ? `${library.rootName} (${library.source})` : "Loading..."}
           </p>
         </div>
 
@@ -1484,7 +1408,7 @@ export default function Home() {
             {theme === "light" ? "Dark theme" : "White theme"}
           </button>
           <button className="button secondary" onClick={() => fileInputRef.current?.click()}>
-            <FolderOpen aria-hidden="true" size={15} strokeWidth={2.2} /> Open main folder
+            <FolderOpen aria-hidden="true" size={15} strokeWidth={2.2} /> Open image root
           </button>
           <input
             ref={fileInputRef}
@@ -1520,37 +1444,8 @@ export default function Home() {
       {error ? <div className="notice">{error}</div> : null}
 
       <section className="control-band">
-        {showSubfolderSelector ? (
-          <label className="field">
-            <span>Image subfolder</span>
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category === "__root__" ? "Root" : category}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        <label className="field compact-field">
-          <span>Subfolders</span>
-          <select value={subfolderMode} onChange={(event) => setSubfolderMode(event.target.value as SubfolderMode)}>
-            <option value="shared">Shared only</option>
-            <option value="all">All</option>
-          </select>
-        </label>
-
-        <label className="field compact-field">
-          <span>Image match</span>
-          <select value={imageMatchMode} onChange={(event) => setImageMatchMode(event.target.value as ImageMatchMode)}>
-            <option value="name">Same names</option>
-            <option value="index">Folder order</option>
-          </select>
-        </label>
-
         <label className="field image-field">
-          <span>{effectiveImageMatchMode === "name" ? "Image" : "Image position"}</span>
+          <span>Image</span>
           <select value={imageName} onChange={(event) => setImageName(event.target.value)}>
             {imageOptions.map((image) => (
               <option key={image} value={image}>
@@ -1636,7 +1531,7 @@ export default function Home() {
       <section className={`viewer-grid count-${slots.length}`}>
         {slots.map((slot) => {
           const caseItem = casesById.get(slot.caseId);
-          const image = getSlotImage(caseItem, categoryId, imageName, effectiveImageMatchMode);
+          const image = getSlotImage(caseItem, imageName);
           const aspect = image ? aspectByUrl[image.url] ?? 1 : 1;
 
           return (

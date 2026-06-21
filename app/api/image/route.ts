@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
   const imagePath = path.resolve(
     root,
     caseName === "__root__" ? "" : caseName,
-    category === "__root__" ? "" : category,
     file,
   );
 
