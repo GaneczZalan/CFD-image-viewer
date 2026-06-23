@@ -3,6 +3,31 @@
 import { ChangeEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Eraser, FolderOpen, Maximize2, Minimize2, Minus, Pencil, RotateCcw, Square, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 
+"use client";
+
+// Firefox ESR / Windows Server polyfill
+if (typeof crypto.randomUUID !== "function") {
+  /** @ts-expect-error - override built-in type */
+  crypto.randomUUID = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    return (
+      hex.slice(0, 8) +
+      "-" +
+      hex.slice(8, 12) +
+      "-" +
+      hex.slice(12, 16) +
+      "-" +
+      hex.slice(16, 20) +
+      "-" +
+      hex.slice(20)
+    );
+  };
+}
+
 type ImageItem = {
   name: string;
   url: string;
