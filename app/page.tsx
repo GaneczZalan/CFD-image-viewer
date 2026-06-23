@@ -3,10 +3,8 @@
 import { ChangeEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Eraser, FolderOpen, Maximize2, Minimize2, Minus, Pencil, RotateCcw, Square, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 
-"use client";
-
 // Firefox ESR / Windows Server polyfill
-if (typeof crypto.randomUUID !== "function") {
+if (typeof crypto !== "undefined" && typeof crypto.randomUUID !== "function") {
   /** @ts-expect-error - override built-in type */
   crypto.randomUUID = () => {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
