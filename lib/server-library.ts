@@ -38,6 +38,31 @@ function sortNatural(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
+function getFrameMatchName(fileName: string) {
+  const baseName = path.basename(fileName, path.extname(fileName));
+  const frameMatch = baseName.match(/(\d+)$/);
+
+  return frameMatch?.[1] ?? baseName;
+}
+
+function withFrameMatchNames(images: ImageItem[]) {
+  const counts = new Map<string, number>();
+
+  for (const image of images) {
+    const matchName = getFrameMatchName(image.name);
+    counts.set(matchName, (counts.get(matchName) ?? 0) + 1);
+  }
+
+  return images.map((image) => {
+    const matchName = getFrameMatchName(image.name);
+
+    return {
+      ...image,
+      name: counts.get(matchName) === 1 ? matchName : image.name,
+    };
+  });
+}
+
 async function walkImages(folder: string, base: string, groups: Map<string, ImageItem[]>) {
   const entries = await readdir(folder, { withFileTypes: true });
 
@@ -74,7 +99,7 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
 
   const entries = await readdir(resolvedRoot, { withFileTypes: true });
   const caseDirs = entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && entry.name.includes("F1"))
     .map((entry) => entry.name)
     .sort(sortNatural);
 
@@ -94,7 +119,12 @@ export async function scanLibrary(root: string): Promise<ImageLibrary> {
           .map((image) => ({
             ...image,
             url: `/api/image?case=${encodeURIComponent(caseName)}&category=${encodeURIComponent(category)}&file=${encodeURIComponent(image.name)}`,
-          })),
+          }))
+          .sort((a, b) => sortNatural(a.name, b.name)),
+      }))
+      .map((category) => ({
+        ...category,
+        images: withFrameMatchNames(category.images),
       }))
       .sort((a, b) => sortNatural(a.name, b.name));
 

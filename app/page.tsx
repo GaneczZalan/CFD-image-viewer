@@ -63,8 +63,44 @@ function naturalSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
+function getFrameMatchName(fileName: string) {
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  const frameMatch = baseName.match(/(\d+)$/);
+
+  return frameMatch?.[1] ?? baseName;
+}
+
+function withFrameMatchNames(images: ImageItem[]) {
+  const counts = new Map<string, number>();
+
+  for (const image of images) {
+    const matchName = getFrameMatchName(image.name);
+    counts.set(matchName, (counts.get(matchName) ?? 0) + 1);
+  }
+
+  return images.map((image) => {
+    const matchName = getFrameMatchName(image.name);
+
+    return {
+      ...image,
+      name: counts.get(matchName) === 1 ? matchName : image.name,
+    };
+  });
+}
+
 function getCategory(caseItem: ImageCase | undefined, categoryId: string) {
   return caseItem?.categories.find((category) => category.id === categoryId);
+}
+
+function formatCategoryName(categoryId: string) {
+  if (categoryId === "__root__") {
+    return "ROOT";
+  }
+
+  return categoryId
+    .split("/")
+    .map((part) => part.replace(/^#/, "").toUpperCase())
+    .join(" / ");
 }
 
 function intersectNames(lists: string[][]) {
@@ -926,6 +962,11 @@ export default function Home() {
       }
 
       const caseName = parts[1];
+
+      if (!caseName.includes("F1")) {
+        continue;
+      }
+
       const category = parts.slice(2, -1).join("/") || "__root__";
       const caseGroups = groups.get(caseName) ?? new Map<string, ImageItem[]>();
       const categoryImages = caseGroups.get(category) ?? [];
@@ -945,7 +986,7 @@ export default function Home() {
           .map(([category, images]) => ({
             id: category,
             name: category === "__root__" ? "Root" : category,
-            images: images.sort((a, b) => naturalSort(a.name, b.name)),
+            images: withFrameMatchNames(images.sort((a, b) => naturalSort(a.name, b.name))),
           }))
           .sort((a, b) => naturalSort(a.name, b.name)),
       }))
@@ -1438,11 +1479,11 @@ export default function Home() {
 
       <section className="control-band">
         <label className="field">
-          <span>Image subfolder</span>
+          <span>Variable</span>
           <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
             {categoryOptions.map((category) => (
               <option key={category} value={category}>
-                {category === "__root__" ? "Root" : category}
+                {formatCategoryName(category)}
               </option>
             ))}
           </select>
