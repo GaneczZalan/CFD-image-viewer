@@ -453,6 +453,11 @@ input:focus {
   min-width: 0;
 }
 
+.slot-picker {
+  display: grid;
+  gap: 6px;
+}
+
 .slot-actions {
   display: flex;
   align-items: center;

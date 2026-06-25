@@ -196,6 +196,7 @@ export default function Home() {
   const [animationEnd, setAnimationEnd] = useState("");
   const [timingMode, setTimingMode] = useState<TimingMode>("fps");
   const [timingValue, setTimingValue] = useState(12);
+  const [animationWidth, setAnimationWidth] = useState(2400);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAnimationOpen, setIsAnimationOpen] = useState(false);
   const [openCasePickerId, setOpenCasePickerId] = useState<string | null>(null);
@@ -215,7 +216,9 @@ export default function Home() {
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [aspectByUrl, setAspectByUrl] = useState<Record<string, number>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pickingSlotId, setPickingSlotId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const slotFileInputRef = useRef<HTMLInputElement>(null);
   const appRef = useRef<HTMLElement>(null);
 
   const casesById = useMemo(() => {
@@ -842,8 +845,7 @@ export default function Home() {
     return { canvas, context };
   }
 
-  function sizeComparisonCanvas(canvas: HTMLCanvasElement, itemCount: number) {
-    const width = 2400;
+  function sizeComparisonCanvas(canvas: HTMLCanvasElement, itemCount: number, width = 2400) {
     const gap = 36;
     const labelHeight = 84;
     const margin = 44;
@@ -890,9 +892,10 @@ export default function Home() {
     exportItems: Array<{ slotId: string; label: string; image: ImageItem }>,
     loadedImages: HTMLImageElement[],
     useCurrentView: boolean,
+    width = 2400,
   ) {
     const colors = getExportColors();
-    const layout = sizeComparisonCanvas(canvas, exportItems.length);
+    const layout = sizeComparisonCanvas(canvas, exportItems.length, width);
 
     context.fillStyle = colors.background;
     context.fillRect(0, 0, layout.width, layout.height);
@@ -1025,6 +1028,61 @@ export default function Home() {
     event.target.value = "";
   }
 
+  // Load a single folder from the user's computer directly into one slot.
+  // The selected folder's subfolders become variable categories; frame
+  // matching works exactly as it does for the main library. No naming or
+  // nesting-depth requirement, so any folder anywhere can be picked.
+  function parseSlotFolder(slotId: string, event: ChangeEvent<HTMLInputElement>) {
+    const files = [...(event.target.files ?? [])] as Array<File & { webkitRelativePath?: string }>;
+    event.target.value = "";
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const imageFiles = files.filter((file) => /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name));
+
+    if (imageFiles.length === 0) {
+      setError("No images were found in the selected folder.");
+      return;
+    }
+
+    const folderName = imageFiles[0]?.webkitRelativePath?.split("/")?.[0] ?? "Folder";
+    const groups = new Map<string, ImageItem[]>();
+
+    for (const file of imageFiles) {
+      const parts = (file.webkitRelativePath || file.name).split("/").filter(Boolean);
+      // parts[0] is the picked folder itself; anything between it and the
+      // file name is the variable category (flattened with "/").
+      const category = parts.slice(1, -1).join("/") || "__root__";
+      const categoryImages = groups.get(category) ?? [];
+      categoryImages.push({ name: file.name, url: URL.createObjectURL(file) });
+      groups.set(category, categoryImages);
+    }
+
+    const categories = [...groups.entries()]
+      .map(([category, images]) => ({
+        id: category,
+        name: category === "__root__" ? "Root" : category,
+        images: withFrameMatchNames(images.sort((a, b) => naturalSort(a.name, b.name))),
+      }))
+      .sort((a, b) => naturalSort(a.name, b.name));
+
+    const newCase: ImageCase = {
+      id: `local:${crypto.randomUUID()}`,
+      name: folderName,
+      categories,
+    };
+
+    setLibrary((current) => {
+      const base = current ?? { source: "local" as const, rootName: folderName, cases: [] };
+      return { ...base, cases: [...base.cases, newCase] };
+    });
+    updateSlot(slotId, { caseId: newCase.id, label: folderName });
+    setOpenCasePickerId(null);
+    setError(null);
+  }
+
   async function exportMontage() {
     if (slots.length === 0 || !categoryId || !imageName) {
       return;
@@ -1074,7 +1132,7 @@ export default function Home() {
       }
 
       const { canvas, context } = createComparisonCanvas();
-      sizeComparisonCanvas(canvas, firstItems.length);
+      sizeComparisonCanvas(canvas, firstItems.length, animationWidth);
       const stream = canvas.captureStream(Math.min(60, Math.max(1, Math.round(effectiveFps))));
       const mimeType = getAnimationMimeType(animationFormat);
 
@@ -1113,7 +1171,7 @@ export default function Home() {
             return promise;
           }),
         );
-        drawComparisonFrame(context, canvas, exportItems, loadedImages, true);
+        drawComparisonFrame(context, canvas, exportItems, loadedImages, true, animationWidth);
         const [track] = stream.getVideoTracks();
 
         if ("requestFrame" in track) {
@@ -1419,6 +1477,19 @@ export default function Home() {
               </label>
             </div>
             <label className="field">
+              <span>Resolution</span>
+              <select
+                value={animationWidth}
+                onChange={(event) => setAnimationWidth(Number(event.target.value))}
+              >
+                <option value={1280}>Low — 1280px wide</option>
+                <option value={1920}>Full HD — 1920px wide</option>
+                <option value={2400}>Standard — 2400px wide</option>
+                <option value={3200}>High — 3200px wide</option>
+                <option value={3840}>4K — 3840px wide</option>
+              </select>
+            </label>
+            <label className="field">
               <span>Download format</span>
               <select
                 value={animationFormat}
@@ -1475,6 +1546,20 @@ export default function Home() {
             // @ts-expect-error Chromium directory picker attribute.
             webkitdirectory=""
             onChange={parseLocalFolder}
+          />
+          <input
+            ref={slotFileInputRef}
+            className="hidden-input"
+            type="file"
+            multiple
+            // @ts-expect-error Chromium directory picker attribute.
+            webkitdirectory=""
+            onChange={(event) => {
+              if (pickingSlotId) {
+                parseSlotFolder(pickingSlotId, event);
+                setPickingSlotId(null);
+              }
+            }}
           />
           <button className="button secondary" onClick={loadServerLibrary}>
             Refresh server
@@ -1559,13 +1644,26 @@ export default function Home() {
               </div>
             </div>
             {openCasePickerId === slot.id ? (
-              <select value={slot.caseId} onChange={(event) => onCaseChange(slot.id, event.target.value)}>
-                {library?.cases.map((caseItem) => (
-                  <option key={caseItem.id} value={caseItem.id}>
-                    {caseItem.name}
-                  </option>
-                ))}
-              </select>
+              <div className="slot-picker">
+                {library && library.cases.length > 0 ? (
+                  <select value={slot.caseId} onChange={(event) => onCaseChange(slot.id, event.target.value)}>
+                    {library.cases.map((caseItem) => (
+                      <option key={caseItem.id} value={caseItem.id}>
+                        {caseItem.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  className="button secondary compact-button"
+                  onClick={() => {
+                    setPickingSlotId(slot.id);
+                    slotFileInputRef.current?.click();
+                  }}
+                >
+                  <FolderOpen aria-hidden="true" size={14} strokeWidth={2.2} /> Pick folder from computer
+                </button>
+              </div>
             ) : null}
           </div>
         ))}
